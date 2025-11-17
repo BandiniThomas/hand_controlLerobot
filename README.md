@@ -104,8 +104,8 @@ Follow your platform's instructions; on many Linux systems a conda package is av
 
 ### Pip / venv alternative
 ```bash
-python -m venv venv
-source venv/bin/activate
+python -m venv hand_control
+source hand_control/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
