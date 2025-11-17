@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
 import time
 from pathlib import Path
 from queue import Queue
@@ -346,7 +348,7 @@ def main(
     quiet: bool = False,
     fps: int = 60,
     model: ModelName = "wilor",
-    cam_idx: int = 0,
+    cam_idx: "int|str" = 0,
     hand: str = "right",
     use_scroll: bool = False,        # default OFF: gripper uses hand angle, not mouse
     # XYZ mapping options
@@ -387,16 +389,33 @@ def main(
     follower_rot = R.from_euler("ZYX", [0, 45, -90], degrees=True).as_matrix()
     follower_pose = GripperPose(follower_pos, follower_rot, open_degree=5)
 
-    tracker = HandTracker(
-        cam_idx=cam_idx,
-        hand=hand,
-        model=model,
-        urdf_path=None,
-        safe_range=SAFE_RANGE,
-        use_scroll=use_scroll,   # default False
-        kf_dt=1 / max(1, fps),
-        show_viz=True,
-    )
+    # Allow cam_idx to be either an integer index or a path/filename. Try to
+    # convert string->int when possible; otherwise pass the string through to
+    # OpenCV (VideoCapture accepts device paths too).
+    cam_idx_val = cam_idx
+    try:
+        if isinstance(cam_idx, str):
+            cam_idx_val = int(cam_idx)
+    except Exception:
+        cam_idx_val = cam_idx
+
+    try:
+        tracker = HandTracker(
+            cam_idx=cam_idx_val,
+            hand=hand,
+            model=model,
+            urdf_path=None,
+            safe_range=SAFE_RANGE,
+            use_scroll=use_scroll,   # default False
+            kf_dt=1 / max(1, fps),
+            show_viz=True,
+        )
+    except RuntimeError as e:
+        print(f"[FATAL] {e}")
+        print("\n[TIP] To use a test video file instead:")
+        print(f"  python main.py --cam-idx /path/to/video.mp4")
+        import sys
+        sys.exit(1)
 
     # --- SO-101 link ---
     so101 = SO101Client(
@@ -509,7 +528,8 @@ if __name__ == "__main__":
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--model", type=str, default="wilor")
-    ap.add_argument("--cam-idx", type=int, default=0)
+    ap.add_argument("--cam-idx", type=str, default="0",
+                    help="Camera index (int) or path to video file")
     ap.add_argument("--hand", type=str, default="right", choices=["left", "right"])
 
     # XYZ mapping options

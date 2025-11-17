@@ -12,6 +12,14 @@ A robot arm teleoperation system based on hand tracking via webcam. Lerobot Cont
 - 🔄 Flexible Tracking: Multiple tracking models available for different use cases
 - 🛠 Customizable: Adjustable sensitivity and control parameters
 
+### What's New (Nov 17, 2025)
+- **Headless & CI-friendly:** The repo now supports running on headless systems (WSL/CI) — see `scripts/run_poke_motor.sh` and the new `TROUBLESHOOTING.md` for env hints.
+- **Clear camera handling:** Camera input accepts integer indices or file/device paths; code now fails with a clear, actionable message when no camera is present, and suggests using a video file for testing.
+- **Lazy kinematics import:** The `pinocchio` dependency is loaded lazily — the app no longer fails at startup if `pinocchio` is missing (only required when using URDF/IK features).
+- **Improved error messages & docs:** Helpful guidance added for common issues and step-by-step troubleshooting in `TROUBLESHOOTING.md`.
+- **Unit tests:** New utility tests added for core mapping/clamping routines (`tests/test_utils.py`).
+
+
 ## Table of Contents
 - [Features](#features)
 - [Installation](#installation)

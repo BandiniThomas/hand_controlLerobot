@@ -1,19 +1,47 @@
 name: hand_control
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10.*
-  - pip>=23.0
+  - python=3.10
+  - pip
+  - setuptools
+  - wheel
+  # --- ADD PyTorch here ---
+  # Use a stable version. Check the PyTorch site for the latest version for your platform.
+  # Example for a specific recent version:
+  - pytorch=2.3.1
+  - torchvision=0.18.1
+  - torchaudio=2.3.1
+  - cpuonly  # Only if you are not using a GPU (highly recommended for non-GPU machines)
+  # --- END PyTorch ADDITION ---
+
   - numpy>=1.23.0
   - opencv
   - matplotlib
+  # Ensure imageio is provided by conda (prevents pip from selecting conflicting versions)
+  - imageio>=2.34,<3.0
+  - imageio-ffmpeg
   - scipy>=1.10.0
   - pydantic>=1.10.0,<2.0.0
   - pytest>=7.0.0
+
   - pip:
-    - pynput>=1.7.0
-    - mediapipe>=0.10.0
-    - "wilor-mini @ git+https://github.com/Joeclinton1/WiLoR-mini"
-    - lerobot>=0.1.0
-    - ruff>=0.1.0
+    # Pin pip packages to specific versions to avoid deep dependency-resolution backtracking
+    - pynput==1.8.1
+  - mediapipe==0.10.21
+  # lerobot has a large, tangled dependency graph that can cause pip's resolver
+  # to fail during `conda env create`. Install it after the conda environment
+  # is created and activated with:
+  #
+  #   conda activate hand_control
+  #   pip install lerobot==0.4.1
+  #
+  # If that still fails, run:
+  #   pip install lerobot==0.4.1 --no-deps
+  # and then install any missing dependencies individually (or ask me to
+  # add specific pins to `environment.yml`).
+    - ruff==0.14.5
+    # DO NOT put the PyTorch packages here anymore if they are above.
+    # We will install wilor-mini (which depends on torch) in Step 3.

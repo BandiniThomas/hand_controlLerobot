@@ -35,6 +35,14 @@ class ObjectDetector:
         Returns:
             List of DetectedObject instances
         """
+        # Validate frame input
+        if frame is None:
+            raise ValueError("Frame is None")
+        if not isinstance(frame, np.ndarray):
+            raise ValueError("Frame must be a numpy.ndarray")
+        if frame.ndim != 3 or frame.shape[2] not in (3, 4):
+            raise ValueError("Frame must be an HxWx3 (or HxWx4) image")
+
         results = self.model(frame)[0]
         detections = []
 
