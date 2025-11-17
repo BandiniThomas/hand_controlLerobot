@@ -42,135 +42,145 @@ A robot arm teleoperation system based on hand tracking via webcam. Lerobot Cont
 
 ## Project Structure
 ```
-hand_control/
-├── hand_teleop/
-│   ├── cameras/                    # Camera handling
-│   │   ├── __init__.py
-│   │   └── camera_manager.py      # Multi-camera management
-│   ├── detection/                  # Object detection
-│   │   ├── __init__.py
-│   │   └── object_detector.py     # YOLOv8 implementation
-│   ├── gripper_pose/              # Gripper control
-│   ├── hand_pose/                 # Hand tracking
-│   ├── kinematics/                # Robot kinematics
-│   └── tracking/                  # Motion tracking
-├── config/                        # Configuration files
-├── scripts/                       # Utility scripts
-└── assets/                        # Project assets
+# Repository layout (top-level)
+.
+├── assets/                         # Images, models and other assets
+├── hand_teleop/                    # Core teleoperation package
+│   ├── cameras/                    # Camera handling and CameraManager
+│   │   └── camera_manager.py
+│   ├── detection/                  # Object detection (YOLOv8 wrapper)
+│   │   └── object_detector.py
+│   ├── gripper_pose/               # Gripper pose computation + utils
+│   ├── hand_pose/                  # Hand pose factories and types
+│   ├── kinematics/                 # URDF / FK / IK wrappers (pinocchio optional)
+│   └── tracking/                   # Tracking & Kalman smoothing
+├── scripts/                        # Utility scripts and wrappers (headless helpers)
+├── src/                            # Installable package entry points (alternate layout)
+├── tests/                          # Unit + integration tests (pytest)
+├── yolov8n.pt                      # Example pretrained weights (optional)
+├── main.py                         # Primary demo / entry script
+├── pick_and_place.py               # Pick-and-place example harness
+├── camera_setup.py                 # Camera helper utilities
+├── test_gripper_only.py            # Quick smoke test script
+├── environment.yml                 # Conda environment spec (recommended)
+├── requirements.txt                # pip requirements (lighter alternative)
+├── TROUBLESHOOTING.md              # Headless/runtime troubleshooting guide
+├── CODE_INSPECTION_REPORT.md       # Recent code inspection summary
+└── FIXES_APPLIED.md                # Summary of fixes applied in branch `jb_test`
 ```
 
 ## Installation
 
-### Prerequisites
-- Python 3.6 or higher
-- Conda (recommended for managing dependencies)
-- Webcam with minimum 720p resolution
-- Arducam camera for object detection
-- SO-101 robot hardware setup
-- USB connection to the robot
-- CUDA-capable GPU (recommended for YOLOv8)
+### Prerequisites (recommended)
+- Python 3.8+ (3.10 used for development)
+- Conda (recommended) or virtualenv
+- Optional hardware: webcam/Arducam, SO-101 robot
+- Optional GPU for fast YOLOv8 inference (CUDA-enabled)
 
-### Installation Methods
+Notes on optional dependencies:
+- `pinocchio` (for advanced kinematics) is optional and only required if you use URDF/FK/IK features. The code lazy-loads `pinocchio` so core features work without it.
+- YOLOv8 (`ultralytics`) is optional for object detection — you can use the system without it and add weights later.
 
-#### Using Conda (Recommended)
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/ABMI-software/hand_controlLerobot.git
-   cd hand_control
-   ```
-
-2. Create and activate environment using provided file:
-   ```bash
-   conda env create -f environment.yml
-   conda activate hand_control
-   ```
-
-3. Install the package in development mode:
-   ```bash
-   pip install -e .
-   ```
-
-#### Using pip
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/ABMI-software/hand_controlLerobot.git
-   cd hand_control
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   pip install -e .
-   ```
-
-#### Verify Installation
-After installation, verify that everything is working:
+### Recommended (Conda) install
+1. Clone the repo and enter directory:
 ```bash
-python test_gripper_only.py
+git clone https://github.com/ABMI-software/hand_controlLerobot.git
+cd hand_controlLerobot
 ```
 
-### Hardware Setup
-1. Connect the SO-101 robot to your computer via USB
-2. Ensure the webcam is properly connected and recognized
-3. Position the webcam with a clear view of the control area
+2. Create and activate the conda env:
+```bash
+conda env create -f environment.yml
+conda activate hand_control
+```
+
+3. Install the package in editable mode:
+```bash
+pip install -e .
+```
+
+4. (Optional) Install `pinocchio` for kinematics (platform dependent):
+Follow your platform's instructions; on many Linux systems a conda package is available.
+
+### Pip / venv alternative
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+```
+
+### Verify installation
+Run a quick smoke test (headless-friendly):
+```bash
+# in base terminal (with env active)
+python -c "import sys,cv2; print('Python', sys.version.split()[0]); print('OpenCV ok', cv2.__version__)"
+pytest -q tests/test_utils.py
+```
+
+If you have a camera attached, try `python main.py` (see Usage). If no camera is attached, the system will fall back to a synthetic camera thread; you can also pass a video file path to `--cam-idx` to emulate a camera.
 
 ## Usage
 
 ### Basic Operation
 
-#### Hand Tracking Only
-1. Start camera - hand tracking and pose estimation:
-   ```bash
-   python main.py
-   ```
+#### Hand Tracking Only (local GUI)
+Start the demo with a camera (index, device path, or video file):
+```bash
+# camera index 0
+python main.py --cam-idx 0
 
-#### Robot Control
-2. Start teleoperation with lerobot and Arducam:
-   ```bash
-   python3 poke_motor.py --hand right --model wilor --cam-idx 0 --fps 30 \
-          --so101-enable --so101-port /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AA9018150-if00 \
-          --invert-z --raw --raw-min 1700 --raw-max 3200 --verbose
-   ```
+# or use a video file for deterministic tests
+python main.py --cam-idx /path/to/test_video.mp4
+```
 
-3. Start teleoperation with lerobot and astra depth camera:
-   ```bash
-   python hand_teleop_local.py --hand right --model wilor --cam-idx -1 --fps 30 \
-          --so101-enable --so101-port /dev/serial/by-id/usb-1a86_USB_Single_Serial_5AA9018150-if00 \
-          --invert-z --raw --raw-min 1700 --raw-max 3200 --verbose --print-joints 
-   ```
+Notes:
+- `--cam-idx` accepts either an integer camera index, a device path (e.g. `/dev/video0`) or a video file path.
+- If no camera is available the system will fall back to a synthetic camera thread for CI/headless runs.
+
+#### Robot Control / Teleoperation
+Run teleoperation using the provided demo scripts. Example (adjust port and options for your hardware):
+```bash
+# example with SO-101 enabled (adjust serial port)
+python3 scripts/gripper_direct_jog.py --hand right --model wilor --cam-idx 0 \
+    --so101-enable --so101-port /dev/serial/by-id/usb-XXXXX --verbose
+```
+
+You can also run older demo wrappers (e.g. `test_gripper_only.py`) for quick smoke tests.
 
 #### Object Detection and Picking
-4. Start object detection and picking system:
-   ```bash
-   python pick_and_place.py
-   ```
+Start the pick-and-place harness (object detector optional):
+```bash
+python pick_and_place.py --cam-idx 0
+```
 
-   Controls:
-   - Press 'a' to switch to auto-pick mode
-   - Press 't' to switch to teleoperation mode
-   - Press 'q' to quit
+Controls (keyboard while running):
+- `a` : switch to auto-pick mode
+- `t` : switch to teleoperation mode
+- `q` : quit
 
-4. Available control modes:
-   - **Direct Control**: Control robot joints directly with hand movements
-   - **Task Space**: Control end-effector position in Cartesian space
-   - **Gripper Control**: Use pinch gesture to control gripper
+Modes supported:
+- Direct Control: joint-level control via hand gestures
+- Task Space: end-effector Cartesian control
+- Gripper Control: pinch gestures to open/close gripper
 
+The pick-and-place harness will use YOLOv8 for detection if weights and `ultralytics` are available; otherwise it runs in degraded mode.
 
-5. to control wrist via mediapipe
-    ```bash
-    to be completed
-    ```
+### Headless / CI-friendly Usage
+For headless systems (CI, servers, WSL) set the environment variables to avoid GUI backends:
+```bash
+export QT_QPA_PLATFORM=offscreen
+export MPLBACKEND=Agg
+# then run headless script
+bash scripts/run_poke_motor.sh
+```
+
+`scripts/run_poke_motor.sh` configures a headless environment and runs the demo; use it when no display server is available.
 
 ### Advanced Features
-- **Gesture Recording**: Save and replay common movement sequences
-- **Safety Limits**: Built-in joint and velocity limits
-- **Multiple Tracking Models**: Switch between different hand tracking models
+- Gesture Recording: Save and replay common movement sequences
+- Safety Limits: Built-in joint and velocity limits
+- Multiple Tracking Models: Switch between different hand tracking models
 
 ## Configuration
 
@@ -183,10 +193,21 @@ python main.py --tracker mediapipe
 python main.py --sensitivity 0.8
 ```
 
-### Robot Settings
-- Joint speed limits can be configured in `config/robot_config.yaml`
-- Gesture mappings can be modified in `config/gesture_mapping.yaml`
-- Camera calibration settings in `config/camera_config.yaml`
+### Robot & Hardware Settings
+- Joint speed limits and robot-specific params: `config/robot_config.yaml` (create if absent)
+- Gesture mappings: `config/gesture_mapping.yaml`
+- Camera calibration: `config/camera_config.yaml` or use OpenCV calibration utilities
+
+### Camera & Device Notes
+- `--cam-idx` accepts an integer camera index, a device path (e.g. `/dev/video0`), or a video file path.
+- When no camera is present the system uses a synthetic camera fallback so tests and demos remain runnable in CI. For automated tests prefer passing a short video file to `--cam-idx`.
+
+### Optional Dependencies (summary)
+- `pinocchio`: kinematics — optional, lazy-loaded
+- `ultralytics` / YOLOv8: object detection — optional, used by `pick_and_place.py`
+- `lerobot`: robot communication — required for SO-101 control
+
+Add or pin these in your environment as needed; see `environment.yml` for the recommended development stack.
 
 ## Troubleshooting
 
