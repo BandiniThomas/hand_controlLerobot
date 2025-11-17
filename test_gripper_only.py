@@ -102,7 +102,8 @@ class SO101GripperOnly:
 def main():
     ap = argparse.ArgumentParser(description="Absolute hand→gripper control (deg-for-deg), gripper-only.")
     # Video / model (GPU by default: leave --device unset so CUDA is used if available)
-    ap.add_argument("--cam-idx", type=int, default=0)
+    ap.add_argument("--cam-idx", type=str, default="0",
+                    help="Camera index (int) or path to video file")
     ap.add_argument("--model", type=str, default="wilor")
     ap.add_argument("--hand", type=str, default="right", choices=["left", "right"])
     ap.add_argument("--device", type=str, default=None, help="Leave None to use CUDA if available, or set 'cpu'/'cuda:0'")
@@ -132,12 +133,24 @@ def main():
 
     args = ap.parse_args()
 
-    # Camera
-    cap = cv2.VideoCapture(args.cam_idx)
+    # Camera: allow either an integer camera index or a path to a video file
+    cam_src = args.cam_idx
+    try:
+        # if user passed an integer-like string, try to open as index
+        cam_idx_val = int(cam_src)
+        cap = cv2.VideoCapture(cam_idx_val)
+    except Exception:
+        # otherwise treat as filename / device path
+        cap = cv2.VideoCapture(str(cam_src))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
     if not cap.isOpened():
-        raise RuntimeError("Failed to open camera")
+        print(f"[FATAL] Failed to open camera at index/path: {cam_src}")
+        print("Check that camera is connected and accessible.")
+        print("\n[TIP] To use a test video file instead:")
+        print(f"  python test_gripper_only.py --cam-idx /path/to/video.mp4")
+        import sys
+        sys.exit(1)
 
     # Pose computer (GPU if available unless you force --device)
     gpc = GripperPoseComputer(device=args.device, model=args.model, hand=args.hand)
@@ -157,7 +170,7 @@ def main():
 
     if calib_range:
         rmin, rmax = calib_range
-        if args.flip-raw:
+        if args.flip_raw:
             rmin, rmax = rmax, rmin
         print(f"[calib] RAW mapping range for '{args.gripper_name}': {rmin} .. {rmax}")
 

@@ -4,13 +4,21 @@ import os
 
 import numpy as np
 
-try:
-    import pinocchio as pin
-except ImportError:
-    raise ImportError(
-        "This feature requires `pinocchio`, which is not available via pip. "
-        "Please install it manually with: `conda install -c conda-forge pinocchio`"
-    )
+# Lazy import: pinocchio is only needed if RobotKinematics is instantiated
+pin = None
+
+def _ensure_pinocchio():
+    """Lazy-load pinocchio only when needed."""
+    global pin
+    if pin is None:
+        try:
+            import pinocchio as _pin
+            pin = _pin
+        except ImportError:
+            raise ImportError(
+                "This feature requires `pinocchio`, which is not available via pip. "
+                "Please install it manually with: `conda install -c conda-forge pinocchio`"
+            )
 
 class RobotKinematics:
     """
@@ -20,6 +28,7 @@ class RobotKinematics:
         • IK   -> ik(q0, target_T, frame)
     """
     def __init__(self, urdf_path: str, frame_name: str = "gripper_link"):
+        _ensure_pinocchio()  # Lazy-load pinocchio when RobotKinematics is instantiated
         if not urdf_path.endswith(".urdf"):
             urdf_path = os.path.join(os.path.dirname(__file__), "urdf", f"{urdf_path}.urdf")
 

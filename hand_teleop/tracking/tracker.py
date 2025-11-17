@@ -14,7 +14,35 @@ from typing import Literal, Optional
 
 import cv2
 import numpy as np
-from pynput import keyboard, mouse
+# pynput requires an X display on some platforms (WSL without GUI will fail).
+# Import it defensively and fall back to lightweight dummies so the tracker
+# can run headless (no keyboard/mouse interaction) when DISPLAY is not set.
+try:
+    from pynput import keyboard, mouse
+except Exception:
+    import types
+
+    class _DummyListener:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            return self
+
+        def stop(self):
+            return None
+
+    class _DummyKey:
+        # sentinel object for space key comparisons
+        space = "<DUMMY_SPACE>"
+
+    class _DummyKeyCode:
+        @staticmethod
+        def from_char(c):
+            return c
+
+    keyboard = types.SimpleNamespace(Listener=_DummyListener, Key=_DummyKey, KeyCode=_DummyKeyCode)
+    mouse = types.SimpleNamespace(Listener=_DummyListener)
 
 from hand_teleop.gripper_pose.gripper_pose import GripperPose
 from hand_teleop.gripper_pose.gripper_pose_computer import GripperPoseComputer
@@ -57,6 +85,8 @@ class HandTracker:
 
         # --- webcam
         self.cap = cv2.VideoCapture(cam_idx)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open camera at index/path: {cam_idx}. Check that camera is connected and accessible.")
 
         # --- cross-thread state ------------------------------------------------
         self.kf = KalmanXYZ(dt=kf_dt, q=kf_q, r=kf_r)
