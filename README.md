@@ -236,3 +236,85 @@ Add or pin these in your environment as needed; see `environment.yml` for the re
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ReadMe par Thomas, sur jetson orin nano
+Lors de l'installation sur jetson, je conseille la méthode par venv. 
+```bash
+python -m venv hand_control
+source hand_control/bin/activate
+```
+Il faut une version de python 3.10 (celle que j'utilise) ou 3.8. 
+Certaines bibliothèques demandent une installation manuelle comme chumpy : 
+```bash
+#installation manuelle de chumpy
+pip install --no-build-isolation "chumpy @ git+https://github.com/mattloper/chumpy"
+
+#installation des requirements sans les bibliothèques non installables (comme wilor)
+pip install --no-build-isolation -r requirements.txt
+pip install -e .
+```
+Lors de l'utilisation, il faut utiliser le model mediapipe car Wilor ne fonctionne pas sur la jetson 
+Pour un test de détection de la main, il faut faire 
+```bash
+python main.py --model mediapipe --cam-idx 0
+```
+Pour contrôler le robot, j'ai modifié le code main.py pour envoyer les informations au Robot Moveo par node ros2. 
+J'utilise un pc sous unbuntu pour la simulation gazebo, relié par un câble ethernet à la jetson orin nano. 
+Voici le protocole pour le faire fonctionner : 
+Sur le PC (lancer la simulation) : 
+```bash
+cd ~/Robot5A-Simulation
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch robot_control visual_sim.launch.py
+
+# Pour afficher les commandes envoyé par la jetson : 
+ros2 topic echo /arm_controller/joint_trajectory
+```
+Sur la Jetson (détéction de la main et commande robot) :
+```bash
+cd ~/hand_controlLerobot
+source hand_control/bin/activate
+source /opt/ros/humble/setup.bash   
+
+python main.py --model mediapipe --cam-idx 0 --so101-enable
+
+```
+Sur la jetson un cadre apparait, il faut appuyer sur la touche espace pour calibrer notre main au coordonnées centre. 
+Les limites de coordonnées sont : 
+
+0,13  < x < 0,36
+-0,23 < y < 0,23
+0,008 < z < 0,25
+
+Les mouvements de la main vont contrôler le robot comme une manette : 
+
+Axe 		articulation 		Type de rotation 
+x		shoulder_lift		Lève/abaisse l’épaule dans le plan sagittal
+y		shoulder_pan		Rotation autour de l’axe vertical (tourne l’épaule droite/gauche)
+z		elbow_flex + wristflex 	Plie/déplie le coude + Plie/déplie le poignet
+
+Pour envoyer des commandes manuelles au robot depuis la jetson, par exemple qu'il revienne à une position initiale : 
+```bash
+ros2 topic pub /arm_controller/joint_trajectory trajectory_msgs/JointTrajectory "
+joint_names: ['R0_Yaw','R1_Pitch','R2_Pitch','R3_Yaw','R4_Pitch']
+points:
+- positions: [0, 0, 0, 0, 0]
+  velocities: []
+  accelerations: []
+  effort: []
+  time_from_start:
+    sec: 1
+    nanosec: 0
+    
+"
+
+# Et pour faire un mouvement pour la position [0.5, -0.3, 0.2, 0, 0] par exemple :
+ros2 topic pub /arm_controller/joint_trajectory trajectory_msgs/JointTrajectory "
+joint_names: ['R0_Yaw','R1_Pitch','R2_Pitch','R3_Yaw','R4_Pitch']
+points:
+- positions: [0.5, -0.3, 0.2, 0, 0]
+  time_from_start: {sec: 2, nanosec: 0}
+
+"
+```

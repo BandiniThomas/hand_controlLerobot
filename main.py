@@ -24,6 +24,12 @@ try:
 except Exception:
     SO101Follower = None
 
+# Import ROS2 pour Moveo
+import rclpy
+from rclpy.node import Node
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+
+
 # Your robot joint names (in the order we command them) + gripper last
 JOINT_NAMES = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_roll", "wrist_flex", "gripper"]
 WRITE_FIELD = "Goal_Position"  # confirmed working
@@ -449,6 +455,16 @@ def main(
     target_dt = 1.0 / fps
     ema_fps = None
 
+    # --- ROS2: publisher vers le contrôleur de l'arm simulé --- pour Moveo
+    rclpy.init(args=None)
+    ros_node = rclpy.create_node("hand_teleop_traj_pub")
+
+    traj_pub = ros_node.create_publisher(
+        JointTrajectory,
+        "/arm_controller/joint_trajectory",
+        10
+    )
+    # -----
     try:
         while tracker.cap.isOpened():
             t0 = time.perf_counter()
@@ -476,6 +492,18 @@ def main(
 
             # XYZ → 5 joints
             xyz = get_xyz_from_pose(pose)
+
+
+            # --- SAFE XYZ CLAMP (prevent robot from flipping) --> test de blocage en dehors de la safe range ---
+            #x = clamp(xyz[0], SAFE_RANGE["x"][0], SAFE_RANGE["x"][1])
+            #y = clamp(xyz[1], SAFE_RANGE["y"][0], SAFE_RANGE["y"][1])
+            #z = clamp(xyz[2], SAFE_RANGE["z"][0], SAFE_RANGE["z"][1])
+            #xyz = np.array([x, y, z], dtype=float)
+            # -----------------------------------------------------
+
+
+            # xyz = np.array([0.2, 0.0, 0.1])
+            # Pour tester on va mettre une valeur fixe : xyz = np.array([0.245, 0.0, 0.129])
             q5 = xyz_to_joints_deg(
                 xyz,
                 invert_x=invert_x, invert_y=invert_y, invert_z=invert_z,
@@ -490,9 +518,32 @@ def main(
             q6[0] = -q6[0]
             # -------------------------------------------------------------------
 
-            # send to robot
+            # send to robot - modifié pour Moveo
+
+            # 1) Envoi éventuel au robot physique (SO-101)
             if so101.enable:
                 so101.set_targets(q6)
+
+            # 2) Envoi à la simulation Gazebo via ROS2 /arm_controller/joint_trajectory
+            #    q5 est en degrés -> conversion en radians pour ROS2
+            q5_rad = np.deg2rad(q5)
+
+            traj_msg = JointTrajectory()
+            traj_msg.joint_names = ['R0_Yaw', 'R1_Pitch', 'R2_Pitch', 'R3_Yaw', 'R4_Pitch']
+
+            pt = JointTrajectoryPoint()
+            pt.positions = q5_rad.tolist()
+            # horizon courte (1s) ; le contrôleur recalcule entre messages
+            pt.time_from_start.sec = 1
+            pt.time_from_start.nanosec = 0
+
+            traj_msg.points.append(pt)
+
+            traj_pub.publish(traj_msg)
+            # Faire tourner l'exécuteur du node pour garder ROS2 en vie
+            rclpy.spin_once(ros_node, timeout_sec=0.0)
+
+            # ------------
 
             # status / pacing
             dt = time.perf_counter() - t0
@@ -505,7 +556,6 @@ def main(
             remain = target_dt - (time.perf_counter() - t0)
             if remain > 0:
                 time.sleep(remain)
-
     finally:
         tracker.cap.release()
         try:
@@ -517,6 +567,17 @@ def main(
                 so101.safe_stop(steps=20, dt=1/50)
         except Exception as e:
             print(f"[so101] safe stop error: {e}")
+
+        # Shutdown ROS2 node proprement pour Moveo
+        try:
+            ros_node.destroy_node()
+        except Exception:
+            pass
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+        # ------
 
     # restore OpenCV (optional)
     cv2.imshow = _original_imshow
